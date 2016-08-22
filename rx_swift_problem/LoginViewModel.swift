@@ -16,94 +16,72 @@ import RxCocoa
 
 class LoginViewModel
 {
-    var provider : RxMoyaProvider<APIProvider>
-    let userNameDriver : Driver<String>
-    let passwordDriver : Driver<String>
+    let validatedUsername: Driver<Bool>
+    let validatedPassword: Driver<Bool>
+    
+    // Is login button enabled
+    let loginEnabled: Observable<Bool>
+    
+    // Has user log in
+    let loggedIn: Observable<Login>
+    
+    var usernameBorderColor : Observable<UIColor>
+    var passwordBorderColor : Observable<UIColor>
 
-    init(provider: RxMoyaProvider<APIProvider>, userName: Driver<String>, password: Driver<String>)
-    {
-        self.provider = provider
-        self.userNameDriver = userName
-        self.passwordDriver = password
-        setup()
-    }
-    
-    var credentials : Driver<(String, String)> {
-        return Driver.combineLatest(userNameDriver.distinctUntilChanged(), passwordDriver.distinctUntilChanged()) { usr, pwd in
-            return (usr, pwd)
+    init(input: (
+        userName: Driver<String>,
+        password: Driver<String>,
+        loginClick: Observable<Void>
+        ),
+        dependency: (
+        RxMoyaProvider<APIProvider>
+        )
+        ) {
+        
+        let credentials = Driver.combineLatest(input.userName, input.password) { ($0, $1) }
+        
+        validatedUsername = input.userName.map { $0.rangeOfString("@") != nil }
+        validatedPassword = input.password.map { $0.utf8.count > 5 }
+        
+        usernameBorderColor = validatedUsername.asObservable()
+            .map{valid in
+                return valid ? UIColor.clearColor() : UIColor.redColor()
         }
-    }
-    
-    var usrValid : Driver<Bool> {
-        get {
-            return userNameDriver
-                .throttle(0.5)
-                .filterEmpty()
-                .distinctUntilChanged()
-                .map { ($0.rangeOfString("@") != nil) || ($0.utf8.count == 0) }
-        }
-    }
-    
-    var pwdValid : Driver<Bool> {
-        get {
-            return passwordDriver
-            .throttle(0.5)
-            .filterEmpty()
-            .distinctUntilChanged()
-            .map { ($0.utf8.count > 5) || ($0.utf8.count == 0) }
-        }
-    }
-
-    var usernameBorderColor : Observable<UIColor>!
-    var passwordBorderColor : Observable<UIColor>!
-
-    var credentialValid : Driver<Bool> {
-        return Driver.combineLatest(usrValid, pwdValid) { usr, pwd in
-            return (usr && pwd)
-        }
-    }
-    
-    func setup()
-    {
-        usernameBorderColor = usrValid.asObservable()
-                                .map{valid in
-                                    return valid ? UIColor.clearColor() : UIColor.redColor()
-                                }
-        passwordBorderColor = pwdValid.asObservable()
-                                .map{valid in
-                                    return valid ? UIColor.clearColor() : UIColor.redColor()
-        }
-    }
-    
-    func login() -> Observable<Login?>
-    {
-        return credentials.asObservable()
-            .observeOn(MainScheduler.instance)
-            .debug()
-            .flatMapLatest { [unowned self] credential -> Observable<Login?> in
-                return self.makeLoginRequest(user: credential.0, password: credential.1)
-            }
-    }
-    
-    func makeLoginRequest(user user: String, password: String) -> Observable<Login?>
-    {
-        var resultLogin : Login
-        if user == "test" && password == "123"
-        {
-            resultLogin = Login(result: 1, message: "OK")
-        }
-        else
-        {
-            resultLogin = Login(result: 0, message: "KO")
+        passwordBorderColor = validatedPassword.asObservable()
+            .map{valid in
+                return valid ? UIColor.clearColor() : UIColor.redColor()
         }
         
-        return Observable.create { observer in
-                observer.onNext(resultLogin)
-                observer.onCompleted()
-            
-                return AnonymousDisposable {
-
+        loginEnabled = Observable.combineLatest(
+            validatedUsername.asObservable(),
+            validatedPassword.asObservable()
+        )   { username, password in
+            username &&
+            password
+            }
+            .distinctUntilChanged()
+            .shareReplay(1)
+        
+        loggedIn = input.loginClick.withLatestFrom(credentials)
+            .flatMap { username, password -> Observable<Login> in
+                var resultLogin : Login
+                if username == "test@" && password == "123123" {
+                    resultLogin = Login(result: 1, message: "OK")
                 }
-        }
+                else {
+                    resultLogin = Login(result: 0, message: "KO")
+                }
+                
+                return Observable.create { observer in
+                    observer.onNext(resultLogin)
+                    observer.onCompleted()
+                    
+                    return AnonymousDisposable {
+                        
+                    }
+                }
+            }
+            .retry()
+            .shareReplay(1)
     }
 }
