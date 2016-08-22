@@ -24,30 +24,51 @@ class ViewController: UIViewController
     var loginModel: LoginViewModel!
 
     
-    override func viewDidLoad()
-    {
+    override func viewDidLoad() {
         super.viewDidLoad()
 
-        loginModel = LoginViewModel(provider: apiProvider, userName: userTextField.rx_text.asDriver(), password: pwdTextField.rx_text.asDriver())
+        let viewModel = LoginViewModel(
+            input: (
+                userName: userTextField.rx_text.asDriver(),
+                password: pwdTextField.rx_text.asDriver(),
+                loginClick: loginButton.rx_tap.asObservable()
+            ),
+            dependency: (
+                apiProvider
+            )
+        )
+        
+        viewModel.loginEnabled
+            .subscribeNext { [weak self] valid  in
+                self?.loginButton.enabled = valid
+                self?.loginButton.alpha = valid ? 1.0 : 0.5
+            }
+            .addDisposableTo(self.disposeBag)
 
-        loginButton.rx_tap
-            .doOn({[unowned self] _ in
-                self.loginButton.enabled = false
-                })
-            .flatMap({[unowned self] in self.loginModel.login() })
-            .subscribeNext({ [weak self] login  in
-                self?.loginButton.enabled = true
+        viewModel.loggedIn
+            .subscribeNext { login  in
                 
-                print(login?.message)
+                print(login.message)
 
-                guard login?.result == 1 else {
+                guard login.result == 1 else {
                     // Show error
                     return;
                 }
                 
                 
-                })
+                }
             .addDisposableTo(disposeBag)
+        
+        // Dismiss keyboard when tap on screen
+        let tapBackground = UITapGestureRecognizer()
+        tapBackground.cancelsTouchesInView = false
+        tapBackground.rx_event
+            .subscribeNext { [weak self] _ in
+                self?.view.endEditing(true)
+            }
+            .addDisposableTo(disposeBag)
+        
+        view.addGestureRecognizer(tapBackground)
 
     }
 }
