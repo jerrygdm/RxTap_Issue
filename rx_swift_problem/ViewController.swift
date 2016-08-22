@@ -48,6 +48,17 @@ class ViewController: UIViewController
                 
                 })
             .addDisposableTo(disposeBag)
+        
+        // Dismiss keyboard when tap on screen
+        let tapBackground = UITapGestureRecognizer()
+        tapBackground.cancelsTouchesInView = false
+        tapBackground.rx_event
+            .subscribeNext { [weak self] _ in
+                self?.view.endEditing(true)
+            }
+            .addDisposableTo(disposeBag)
+        
+        view.addGestureRecognizer(tapBackground)
 
     }
 }
