@@ -97,7 +97,7 @@ class LoginViewModel
             resultLogin = Login(result: 0, message: "KO")
         }
         
-        return Observable.create { [weak self] observer in
+        return Observable.create { observer in
                 observer.onNext(resultLogin)
                 observer.onCompleted()
             
